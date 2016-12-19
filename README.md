@@ -19,12 +19,12 @@ This script maps polyA sites on the genome based on read mappings in SAM format,
 ## Output
 The script will output BED6 with the following columns:
 
-* col1 -> chr
-* col2 -> start of polyA site (0-based)
-* col3 -> end of polyA site
-* col4 -> ID of the read containing a polyA tail
-* col5 -> length of the polyA tail on read
-* col6 -> genomic strand of the read (inferred from the mapping of the read, i.e. '-' if the detected A tail is at the beginning of the read (polyT tail), and '+' if it's at the end of it (polyA tail).)
+* column 1 -> chromosome
+* column 2 -> start of polyA site (0-based)
+* column 3 -> end of polyA site
+* column 4 -> ID of the read containing a polyA tail
+* column 5 -> length of the polyA tail on read
+* column 6 -> genomic strand of the read (inferred from the mapping of the read, i.e. '-' if the detected A tail is at the beginning of the read (polyT tail), and '+' if it's at the end of it (polyA tail).)
 
 ## Dependencies
 Getopt::Long
