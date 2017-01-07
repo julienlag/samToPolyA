@@ -24,7 +24,7 @@ The script will output BED6 with the following columns:
 * column 3: end of polyA site
 * column 4: ID of the read containing a polyA tail
 * column 5: length of the polyA tail on read
-* column 6: genomic strand of the read (inferred from the mapping of the read, i.e. '-' if the detected A tail is at the beginning of the read (polyT tail), and '+' if it's at the end of it (polyA tail).)
+* column 6: genomic strand of the read (inferred from the mapping of the read, i.e. reads where a polyA tail was detected at their 3’ end are assigned a ‘+’ genomic strand, whereas reads with a polyT tail at their 5’ end are deduced to originate from the ‘-’ strand.)
 
 ## Dependencies (CPAN)
 Getopt::Long
