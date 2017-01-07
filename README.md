@@ -1,5 +1,5 @@
 # samToPolyA
-A utility to call polyA sites based on genome alignments in SAM format
+A utility to detect poly-adenylated sequencing reads, call on-genome polyA sites and infer the reads' strand based on reads-to-genome alignments in SAM format
 
 ## Input
 Read-to-genome alignments in SAM format, and the corresponding genome sequence in multifasta.
