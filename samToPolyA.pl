@@ -32,7 +32,7 @@ $|=1;
 
 my $minSoftClippedSeqLength=10;
 my $minAcontent=0.8;
-my $minUpMisPrimeAlength;
+my $minUpMisPrimeAlength=10;
 my $genomeFa;
 GetOptions ('minClipped=i' => \$minSoftClippedSeqLength,
             'minAcontent:f' => \$minAcontent,
