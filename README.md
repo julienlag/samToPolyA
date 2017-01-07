@@ -7,9 +7,9 @@ Read-to-genome alignments in SAM format, and the corresponding genome sequence i
 ## Options
 This script maps polyA sites on the genome based on read mappings in SAM format, and according to following provided parameters:
   - minClipped (integer)
-            = minimum length of A or T tail required to call a PolyA site.
+            = minimum length of A or T tail required to call a PolyA site. Default: '10'.
   - minAcontent (float)
-            = required A (or T, if minus strand) content of the tail. 
+            = required A (or T, if minus strand) content of the tail. Default: '0.8'.
               Note: minAcontent affects both the A tail and the upstream A stretch.
   - minUpMisPrimeAlength (integer)
             = minimum length of genomic A stretch immediately upstream a putative site required to call a false positive (presumably due to internal RT priming), and hence not report the corresponding site.
