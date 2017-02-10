@@ -3,32 +3,127 @@
 use strict;
 use warnings;
 use Getopt::Long;
+use Pod::Usage;
 use Bio::DB::Fasta;
-
 $|=1;
 
-###### this script maps polyA sites on the genome based on read mappings in SAM format, and according to following provided parameters:
-#
-#
-##  minClipped: integer
-#              = minimum length of A or T tail required to call a PolyA site
-##  minAcontent: float
-#              = required A (or T, if minus strand) content of the tail
-#              Note: minAcontent affects both the A tail and the upstream A stretch.
-##  minUpMisPrimeAlength: integer
-#              = minimum length of genomic A stretch immediately upstream a putative site required to call a false positive (presumably due to internal RT priming), and hence not report the corresponding site
-##  genomeFasta: string
-#              = path to multifasta of genome (+ spike-in sequences if applicable), used to extract upstream genomic sequence.
-#
-#
-## The script will output BED6 with the following columns:
-# col1 -> chr
-# col2 -> start of polyA site (0-based)
-# col3 -> end of polyA site
-# col4 -> ID of the read containing a polyA tail
-# col5 -> length of the polyA tail on read
-# col6 -> strand of the read (inferred from the mapping of the read, i.e. '-' if the detected A tail is at the beginning of the read (polyT tail), and '+' if it's at the end of it (polyA tail).)
-## author: Julien Lagarde, CRG, Barcelona, contact julienlag@gmail.com
+my $message_text  = "Error\n";
+my $exit_status   = 2;          ## The exit status to use
+my $verbose_level = 99;          ## The verbose level to use
+my $filehandle    = \*STDERR;   ## The filehandle to write to
+my $sections = "NAME|SYNOPSIS|DESCRIPTION";
+
+=head1 NAME
+
+samToPolyA
+
+=head1 SYNOPSIS
+
+A utility to detect poly-adenylated sequencing reads, call on-genome polyA sites and infer the reads' strand based on reads-to-genome alignments in SAM format.
+
+B<Usage example> (on a BAM file):
+
+C<< samtools view $file.bam |samToPolyA.pl --minClipped=20 --minAcontent=0.9 --minUpMisPrimeAlength=10 --genomeFasta=hg38.fa - > ${file}_polyAsites.bed >>
+
+
+=head2 INPUT
+
+Read-to-genome alignments in SAM format, and the corresponding genome sequence in multifasta.
+
+The script looks for terminal soft-clipped A/T sequences (marked as "S" in the CIGAR string)
+
+=head2 OPTIONS
+
+This script maps polyA sites on the genome based on read mappings in SAM format, and according to following provided parameters:
+
+=over
+
+=item B<minClipped> (integer) = minimum length of A or T tail required to call a PolyA site.
+
+Default: '10'.
+
+=item B<minAcontent> (float) = required A (or T, if minus strand) content of the tail.
+
+Default: '0.8'.
+
+Note: minAcontent affects both the A tail and the upstream A stretch.
+
+=item B<minUpMisPrimeAlength> (integer) = minimum length of genomic A stretch immediately upstream a putative site required to call a false positive (presumably due to internal RT priming), and hence not report the corresponding site.
+
+Default: '10'.
+
+=item B<genomeFasta> (string) = path to multifasta of genome (+ spike-in sequences if applicable), used to extract upstream genomic sequence.
+
+=back
+
+=head2 OUTPUT
+
+The script will output BED6 with the following columns:
+
+=over
+
+=item column 1: chromosome
+
+=item column 2: start of polyA site (0-based)
+
+=item column 3: end of polyA site
+
+=item column 4: ID of the read containing a polyA tail
+
+=item column 5: length of the polyA tail on read
+
+=item column 6: genomic strand of the read (inferred from the mapping of the read, i.e. reads where a polyA tail was detected at their 3' end are assigned a '+' genomic strand, whereas reads with a polyT tail at their 5' end are deduced to originate from the '-' strand.)
+
+=back
+
+=head1 DESCRIPTION
+
+The script will search for read alignment patterns such as:
+
+
+C<< XXXXXXXXXXXXXXXXXXXXXAAAAAAAAAAAAAAA(YYYY) [read] >>
+
+C<< |||||||||||||||||||||..................... [match] >>
+
+C<< XXXXXXXXXXXXXXXXXXXXZwwwwwwwwwwwwwwwwwwwww [reference sequence] >>
+
+or
+
+C<< (YYYY)TTTTTTTTTTTTTTTTXXXXXXXXXXXXXXXXXXXX [read] >>
+
+C<< ......................|||||||||||||||||||| [match] >>
+
+C<< wwwwwwwwwwwwwwwwwwwwwwZXXXXXXXXXXXXXXXXXXX [reference sequence] >>
+
+Where:
+
+=over
+
+=item C<|> / C<.> = a position mapped / unmapped to the reference, respectively
+
+=item C<X> = the mapped portion of the read or reference sequence
+
+=item C<(Y)> = an optional soft-clipped, non-(A|T)-rich sequence (possibly a sequencing adapter)
+
+=item C<Z> = the position on the reference sequence where the alignment breaks
+
+=item The C<A> / C<T> streches are soft-clipped ('S' in CIGAR nomenclature) in the alignment
+
+=item C<w> = the portion of the reference sequence unaligned to the read
+
+=back
+
+In that example, the first / second alignment would lead to a called polyA site at position Z on the '+' / '-' strand of the reference sequence, respectively.
+
+=head1 DEPENDENCIES
+
+CPAN: Bio::DB::Fasta
+
+=head1 AUTHOR
+
+Julien Lagarde, CRG, Barcelona, contact julienlag@gmail.com
+
+=cut
 
 my $minSoftClippedSeqLength=10;
 my $minAcontent=0.8;
@@ -38,7 +133,18 @@ GetOptions ('minClipped=i' => \$minSoftClippedSeqLength,
             'minAcontent:f' => \$minAcontent,
             'minUpMisPrimeAlength=i' => \$minUpMisPrimeAlength,
             'genomeFasta=s' => \$genomeFa)
-  or die("Error in command line arguments\n");
+  or pod2usage( { -message => "Error in command line arguments",
+        		  -exitval => $exit_status  ,
+            		-verbose => $verbose_level,
+               -output  => $filehandle } );
+
+unless(defined $minSoftClippedSeqLength && defined $minAcontent && defined $minUpMisPrimeAlength && defined $genomeFa ){
+	pod2usage( { -message => "Error in command line arguments",
+        		  -exitval => $exit_status  ,
+            		-verbose => $verbose_level,
+               -output  => $filehandle } );
+}
+
 
 my $chrdb = Bio::DB::Fasta->new("$genomeFa", -reindex => 0);
 
@@ -49,6 +155,7 @@ while (<STDIN>){
 	chomp;
 	next if($_=~/^\@SQ/); #skip sequence header
 	my @line=split "\t";
+	die "Invalid format (doesn't look like SAM)\n" unless ($#line>9);
 	next if($line[5] eq '*'); #skip unmapped reads
 	my @cigarNumbers=split (/[A-Z]/,$line[5]);
 	my @cigarLetters=split(/\d+/,$line[5]);
@@ -66,9 +173,15 @@ while (<STDIN>){
 		if ($aTailLength>0){
 			my $upstreamStop=$line[3]+$minUpMisPrimeAlength;
 			my $upstreamGenomeSeq=$chrdb->seq($line[2], $line[3], $upstreamStop);
-			$upstreamGenomeSeq=reverse($upstreamGenomeSeq);
-			$upstreamGenomeSeq=~ tr/ACGTacgt/TGCAtgca/;
-			my $upstreamGenomeAsLength=countAs($upstreamGenomeSeq, $minUpMisPrimeAlength);
+			my $upstreamGenomeAsLength=0;
+			if(defined $upstreamGenomeSeq && length($upstreamGenomeSeq)>0){
+				$upstreamGenomeSeq=reverse($upstreamGenomeSeq);
+				$upstreamGenomeSeq=~ tr/ACGTacgt/TGCAtgca/;
+				$upstreamGenomeAsLength=countAs($upstreamGenomeSeq, $minUpMisPrimeAlength);
+			}
+			else{
+				warn "WARNING: Could not extract reference sequence in $line[2] (is it present in $genomeFa?). Assuming no A stretch upstream of putative site.\n"
+			}
 			unless ($upstreamGenomeAsLength >= $minUpMisPrimeAlength){
 				my $start=$line[3]-1;
 				print "$line[2]\t$start\t$line[3]\t$line[0]\t$aTailLength\t$strand\n";
@@ -96,7 +209,13 @@ while (<STDIN>){
 			my $upstreamStop=$start;
 			my $upstreamStart=$start-$minUpMisPrimeAlength;
 			my $upstreamGenomeSeq=$chrdb->seq($line[2], $upstreamStart, $upstreamStop);
-			my $upstreamGenomeAsLength=countAs($upstreamGenomeSeq, $minUpMisPrimeAlength);
+			my $upstreamGenomeAsLength=0;
+			if(defined $upstreamGenomeSeq && length($upstreamGenomeSeq)>0){
+				$upstreamGenomeAsLength=countAs($upstreamGenomeSeq, $minUpMisPrimeAlength);
+			}
+			else{
+				warn "WARNING: Could not extract reference sequence in $line[2] (is it present in $genomeFa?). Assuming no A stretch upstream of putative site.\n"
+			}
 			unless ($upstreamGenomeAsLength >= $minUpMisPrimeAlength){
 				print "$line[2]\t$start\t$end\t$line[0]\t$aTailLength\t$strand\n";
 			}
@@ -125,8 +244,7 @@ sub countAs{
 	 	$countMismatches++;
 	 }
 	}
-	if($SeqLength >= $minSeqLength && $countAs > $minSeqLength-$maxMismatches){# && $countAs/$SeqLength >= $minAcontent){
-
+	if($SeqLength >= $minSeqLength && $countAs > $minSeqLength-$maxMismatches){
 		return $SeqLength;
 	}
 	else{
