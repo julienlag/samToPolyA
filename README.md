@@ -14,11 +14,11 @@ A utility to detect poly-adenylated sequencing reads, call on-genome polyA sites
 
 Read-to-genome alignments in SAM format, and the corresponding genome sequence in multifasta.
 
-The script looks for terminal soft-clipped A/T sequences (marked as "S" in the CIGAR string)
+The script looks for terminal soft-clipped A/T sequences (marked as "S" in the CIGAR string).
 
 ## OPTIONS
 
-This script maps polyA sites on the genome based on read mappings in SAM format, and according to following provided parameters:
+This script maps polyA sites on the genome based on read mappings in SAM format, and according to the following provided parameters:
 
 - **minClipped** (integer) = minimum length of A or T tail required to call a PolyA site.
 
@@ -30,7 +30,7 @@ This script maps polyA sites on the genome based on read mappings in SAM format,
 
     Note: minAcontent affects both the A tail and the upstream A stretch.
 
-- **minUpMisPrimeAlength** (integer) = minimum length of genomic A stretch immediately upstream a putative site required to call a false positive (presumably due to internal RT priming), and hence not report the corresponding site.
+- **minUpMisPrimeAlength** (integer) = minimum length of genomic A stretch immediately upstream a putative site required to call a false positive (presumably due to internal RT priming), and hence not report the corresponding site in the output.
 
     Default: '10'.
 
@@ -45,25 +45,25 @@ The script will output BED6 with the following columns:
 - column 3: end of polyA site
 - column 4: ID of the read containing a polyA tail
 - column 5: length of the polyA tail on read
-- column 6: genomic strand of the read (inferred from the mapping of the read, i.e. reads where a polyA tail was detected at their 3' end are assigned a '+' genomic strand, whereas reads with a polyT tail at their 5' end are deduced to originate from the '-' strand.)
+- column 6: genomic strand of the read (see DESCRIPTION below)
 
 # DESCRIPTION
 
 The script will search for read alignment patterns such as:
 
-`XXXXXXXXXXXXXXXXXXXXXAAAAAAAAAAAAAAA(YYYY) [read]`
+`XXXXXXXXXXXAAAAAAAAAAAAAAA(YYYY) [read]`
 
-`|||||||||||||||||||||..................... [match]`
+`|||||||||||..................... [match]`
 
-`XXXXXXXXXXXXXXXXXXXXZwwwwwwwwwwwwwwwwwwwww [reference sequence]`
+`XXXXXXXXXXXZ-------------------- [reference sequence]`
 
 or
 
-`(YYYY)TTTTTTTTTTTTTTTTXXXXXXXXXXXXXXXXXXXX [read]`
+`(YYYY)TTTTTTTTTTTTTTTTXXXXXXXXXX [read]`
 
-`......................|||||||||||||||||||| [match]`
+`......................|||||||||| [match]`
 
-`wwwwwwwwwwwwwwwwwwwwwwZXXXXXXXXXXXXXXXXXXX [reference sequence]`
+`---------------------ZXXXXXXXXXX [reference sequence]`
 
 Where:
 
@@ -72,9 +72,9 @@ Where:
 - `(Y)` = an optional soft-clipped, non-(A|T)-rich sequence (possibly a sequencing adapter)
 - `Z` = the position on the reference sequence where the alignment breaks
 - The `A` / `T` streches are soft-clipped ('S' in CIGAR nomenclature) in the alignment
-- `w` = the portion of the reference sequence unaligned to the read
+- `-` = the portion of the reference sequence unaligned to the read
 
-In that example, the first / second alignment would lead to a called polyA site at position Z on the '+' / '-' strand of the reference sequence, respectively.
+The genomic strand of the read + polyA site is inferred from the mapping of the read, _i.e._, reads where a polyA tail was detected at their 3' end are assigned a '+' genomic strand, whereas reads with a polyT tail at their 5' end are deduced to originate from the '-' strand. In that example, the first / second alignment would lead to a called polyA site at position Z on the '+' / '-' strand of the reference sequence, respectively.
 
 # DEPENDENCIES
 
