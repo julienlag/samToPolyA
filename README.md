@@ -8,7 +8,7 @@ A utility to detect poly-adenylated sequencing reads, call on-genome polyA sites
 
 **Usage example** (on a BAM file):
 
-`samtools view $file.bam |samToPolyA.pl --minClipped=20 --minAcontent=0.9 --minUpMisPrimeAlength=10 --genomeFasta=hg38.fa - > ${file}_polyAsites.bed`
+`samtools view $file.bam |samToPolyA.pl --minClipped=20 --minAcontent=0.9  - > ${file}_polyAsites.bed`
 
 ## INPUT
 
@@ -30,11 +30,19 @@ This script maps polyA sites on the genome based on read mappings in SAM format,
 
     Note: minAcontent affects both the A tail and the upstream A stretch.
 
-- **minUpMisPrimeAlength** (integer) = minimum length of genomic A stretch immediately upstream a putative site required to call a false positive (presumably due to internal RT priming), and hence not report the corresponding site in the output.
+- **discardInternallyPrimed** = when enabled, the program will try to avoid outputting false polyA sites arising from internal mis-priming during the cDNA library construction. This option is particularly useful if your cDNA was oligo-dT primed.
+
+    Default: disabled.
+
+    Requires option **genomeFasta** to be set.
+
+- **minUpMisPrimeAlength** (integer) (ignored if **discardInternallyPrimed** is not set) = minimum length of genomic A stretch immediately upstream a putative site required to call a false positive (presumably due to internal RT priming), and hence not report the corresponding site in the output.
 
     Default: '10'.
 
-- **genomeFasta** (string) = path to multifasta of genome (+ spike-in sequences if applicable), used to extract upstream genomic sequence.
+- **genomeFasta** (string) (valid only if **discardInternallyPrimed** is set)= path to multifasta of genome (+ spike-in sequences if applicable), used to extract upstream genomic sequence.
+
+    **Note**: You need write access to the directory containing this file, as the included Bio::DB::Fasta module will create a genomeFasta.index file if it doesn't exist.
 
 ## OUTPUT
 

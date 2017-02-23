@@ -23,7 +23,7 @@ A utility to detect poly-adenylated sequencing reads, call on-genome polyA sites
 
 B<Usage example> (on a BAM file):
 
-C<< samtools view $file.bam |samToPolyA.pl --minClipped=20 --minAcontent=0.9 --minUpMisPrimeAlength=10 --genomeFasta=hg38.fa - > ${file}_polyAsites.bed >>
+C<< samtools view $file.bam |samToPolyA.pl --minClipped=20 --minAcontent=0.9  - > ${file}_polyAsites.bed >>
 
 
 =head2 INPUT
@@ -48,11 +48,19 @@ Default: '0.8'.
 
 Note: minAcontent affects both the A tail and the upstream A stretch.
 
-=item B<minUpMisPrimeAlength> (integer) = minimum length of genomic A stretch immediately upstream a putative site required to call a false positive (presumably due to internal RT priming), and hence not report the corresponding site in the output.
+=item B<discardInternallyPrimed> = when enabled, the program will try to avoid outputting false polyA sites arising from internal mis-priming during the cDNA library construction. This option is particularly useful if your cDNA was oligo-dT primed.
+
+Default: disabled.
+
+Requires option B<genomeFasta> to be set.
+
+=item B<minUpMisPrimeAlength> (integer) (ignored if B<discardInternallyPrimed> is not set) = minimum length of genomic A stretch immediately upstream a putative site required to call a false positive (presumably due to internal RT priming), and hence not report the corresponding site in the output.
 
 Default: '10'.
 
-=item B<genomeFasta> (string) = path to multifasta of genome (+ spike-in sequences if applicable), used to extract upstream genomic sequence.
+=item B<genomeFasta> (string) (valid only if B<discardInternallyPrimed> is set)= path to multifasta of genome (+ spike-in sequences if applicable), used to extract upstream genomic sequence.
+
+B<Note>: You need write access to the directory containing this file, as the included Bio::DB::Fasta module will create a genomeFasta.index file if it doesn't exist.
 
 =back
 
@@ -128,27 +136,49 @@ Julien Lagarde, CRG, Barcelona, contact julienlag@gmail.com
 my $minSoftClippedSeqLength=10;
 my $minAcontent=0.8;
 my $minUpMisPrimeAlength=10;
+my $discardInternallyPrimed='';
 my $genomeFa;
 GetOptions ('minClipped=i' => \$minSoftClippedSeqLength,
             'minAcontent:f' => \$minAcontent,
             'minUpMisPrimeAlength=i' => \$minUpMisPrimeAlength,
-            'genomeFasta=s' => \$genomeFa)
+            'genomeFasta=s' => \$genomeFa,
+            'discardInternallyPrimed' => \$discardInternallyPrimed)
   or pod2usage( { -message => "Error in command line arguments",
         		  -exitval => $exit_status  ,
             		-verbose => $verbose_level,
                -output  => $filehandle } );
 
-unless(defined $minSoftClippedSeqLength && defined $minAcontent && defined $minUpMisPrimeAlength && defined $genomeFa ){
+unless(defined $minSoftClippedSeqLength && defined $minAcontent){
 	pod2usage( { -message => "Error in command line arguments",
         		  -exitval => $exit_status  ,
             		-verbose => $verbose_level,
                -output  => $filehandle } );
 }
 
+my $chrdb;
 
-my $chrdb = Bio::DB::Fasta->new("$genomeFa", -reindex => 0);
+if($discardInternallyPrimed){
+	print STDERR "Will try to discard false polyA tails resulting from internal mis-priming.\n";
+	if(defined $genomeFa && defined $minUpMisPrimeAlength){
+		$chrdb = Bio::DB::Fasta->new("$genomeFa", -reindex => 0);
+	}
+	else{
+		pod2usage( { -message => "Error in command line arguments: --discardInternallyPrimed requires --genomeFasta to be set.\n",
+        		  -exitval => $exit_status  ,
+            		-verbose => $verbose_level,
+               -output  => $filehandle } );
+	}
+}
 
-
+else{
+#	print STDERR "Will not try to discard false polyA tails resulting from internal mis-priming.\n";
+	if(defined $genomeFa){
+		pod2usage( { -message => "Error in command line arguments: --genomeFasta requires --discardInternallyPrimed to be set.\n",
+        		  -exitval => $exit_status  ,
+            		-verbose => $verbose_level,
+               -output  => $filehandle } );
+	}
+}
 
 while (<STDIN>){
 	my $line=$_;
@@ -171,23 +201,27 @@ while (<STDIN>){
 		#there might be an exogenous sequence adapter at the end of the sequence.
 		my $aTailLength=countAs($tailSeq, $minSoftClippedSeqLength);
 		if ($aTailLength>0){
-			my $upstreamStop=$line[3]+$minUpMisPrimeAlength;
-			my $upstreamGenomeSeq=$chrdb->seq($line[2], $line[3], $upstreamStop);
 			my $upstreamGenomeAsLength=0;
-			if(defined $upstreamGenomeSeq && length($upstreamGenomeSeq)>0){
-				$upstreamGenomeSeq=reverse($upstreamGenomeSeq);
-				$upstreamGenomeSeq=~ tr/ACGTacgt/TGCAtgca/;
-				$upstreamGenomeAsLength=countAs($upstreamGenomeSeq, $minUpMisPrimeAlength);
-			}
-			else{
-				warn "WARNING: Could not extract reference sequence in $line[2] (is it present in $genomeFa?). Assuming no A stretch upstream of putative site.\n"
+
+			if($discardInternallyPrimed){
+				my $upstreamStop=$line[3]+$minUpMisPrimeAlength;
+				my $upstreamGenomeSeq=$chrdb->seq($line[2], $line[3], $upstreamStop);
+				$upstreamGenomeAsLength=0;
+				if(defined $upstreamGenomeSeq && length($upstreamGenomeSeq)>0){
+					$upstreamGenomeSeq=reverse($upstreamGenomeSeq);
+					$upstreamGenomeSeq=~ tr/ACGTacgt/TGCAtgca/;
+					$upstreamGenomeAsLength=countAs($upstreamGenomeSeq, $minUpMisPrimeAlength);
+				}
+				else{
+					warn "WARNING: Could not extract reference sequence in $line[2] (is it present in $genomeFa?). Assuming no A stretch upstream of putative site.\n"
+				}
 			}
 			unless ($upstreamGenomeAsLength >= $minUpMisPrimeAlength){
 				my $start=$line[3]-1;
 				print "$line[2]\t$start\t$line[3]\t$line[0]\t$aTailLength\t$strand\n";
 				next; # found, no need to look at the other end of the read
 			}
-			}
+		}
 	}
 
 	if($cigarLetters[$#cigarLetters] eq 'S' && $cigarNumbers[$#cigarNumbers] > $minSoftClippedSeqLength){ #tail is likely at the end of the read
@@ -197,7 +231,8 @@ while (<STDIN>){
 		#there might be an exogenous sequence adapter at the end of the sequence.
 		my $aTailLength=countAs($tailSeq, $minSoftClippedSeqLength);
 		if($aTailLength>0){
-			#calculate where the start of the tail is on the genome
+			my $upstreamGenomeAsLength=0;
+				#calculate where the start of the tail is on the genome
 			my $genomicLength=0;
 			for (my $i=0; $i<=$#cigarLetters;$i++){
 				if($cigarLetters[$i] =~ /[MDNXP]/){
@@ -206,15 +241,17 @@ while (<STDIN>){
 			}
 			my $start=$line[3]+$genomicLength-1;
 			my $end=$start+1;
-			my $upstreamStop=$start;
-			my $upstreamStart=$start-$minUpMisPrimeAlength;
-			my $upstreamGenomeSeq=$chrdb->seq($line[2], $upstreamStart, $upstreamStop);
-			my $upstreamGenomeAsLength=0;
-			if(defined $upstreamGenomeSeq && length($upstreamGenomeSeq)>0){
-				$upstreamGenomeAsLength=countAs($upstreamGenomeSeq, $minUpMisPrimeAlength);
-			}
-			else{
-				warn "WARNING: Could not extract reference sequence in $line[2] (is it present in $genomeFa?). Assuming no A stretch upstream of putative site.\n"
+			if($discardInternallyPrimed){
+				my $upstreamStop=$start;
+				my $upstreamStart=$start-$minUpMisPrimeAlength;
+				my $upstreamGenomeSeq=$chrdb->seq($line[2], $upstreamStart, $upstreamStop);
+				my $upstreamGenomeAsLength=0;
+				if(defined $upstreamGenomeSeq && length($upstreamGenomeSeq)>0){
+					$upstreamGenomeAsLength=countAs($upstreamGenomeSeq, $minUpMisPrimeAlength);
+				}
+				else{
+					warn "WARNING: Could not extract reference sequence in $line[2] (is it present in $genomeFa?). Assuming no A stretch upstream of putative site.\n"
+				}
 			}
 			unless ($upstreamGenomeAsLength >= $minUpMisPrimeAlength){
 				print "$line[2]\t$start\t$end\t$line[0]\t$aTailLength\t$strand\n";
